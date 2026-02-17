@@ -220,4 +220,20 @@ Data fusion → player_fused (vue agrégée)
 
 ---
 
+---
+
+## 8. Publier sur GitHub
+
+```bash
+# 1. Créer le dépôt "Proj_Multi-Source_Football_FC_Metz_data" sur GitHub (new repository)
+
+# 2. Ajouter le remote (remplacer VOTRE_USERNAME par votre nom d'utilisateur GitHub)
+git remote add origin https://github.com/VOTRE_USERNAME/Proj_Multi-Source_Football_FC_Metz_data.git
+
+# 3. Pousser le code
+git push -u origin main
+```
+
+---
+
 *Mini-projet Base de Données — Ligue 1 multi-sources*
