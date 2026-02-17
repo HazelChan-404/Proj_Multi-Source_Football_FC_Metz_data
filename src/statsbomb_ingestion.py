@@ -1,5 +1,16 @@
 """
 StatsBomb ingestion - competitions, matches, events, lineups, player_season_stats.
+StatsBomb 入库模块 - 联赛、比赛、事件、首发、球员赛季统计
+
+Vue d'ensemble / 功能概述 :
+  - 通过 StatsBomb API 拉取 Ligue 1 数据（config 中配置联赛名/国家）
+  - competitions, seasons → teams, matches → events, match_lineups, player_season_stats
+  - events：传球、射门、带球等逐条事件
+  - lineups：首发阵容、换人、出场时间
+
+Flux / 执行顺序 :
+  get_competitions → find_ligue1_current_season → ingest_competitions → ingest_matches
+  → ingest_events → ingest_match_lineups → ingest_player_season_stats → update_player_info_from_mapping
 """
 
 import json
@@ -37,7 +48,8 @@ def _extract_id(obj):
 
 
 # ============================================================
-# 1. DISCOVER COMPETITION & SEASON
+# 1. Découverte compétition / saison
+# 1. 发现联赛与赛季（根据 config 筛选 Ligue 1）
 # ============================================================
 
 def get_competitions():
@@ -83,7 +95,8 @@ def find_ligue1_current_season(comps_df=None):
 
 
 # ============================================================
-# 2. INGEST COMPETITIONS & SEASONS
+# 2. Ingestion competitions et seasons
+# 2. 联赛与赛季入库（competitions, seasons 表）
 # ============================================================
 
 def ingest_competitions(conn, comps_df=None):
@@ -127,7 +140,8 @@ def ingest_competitions(conn, comps_df=None):
 
 
 # ============================================================
-# 3. INGEST MATCHES
+# 3. Ingestion des matchs
+# 3. 比赛入库（matches, teams 表）
 # ============================================================
 
 def get_matches(competition_id, season_id):
@@ -247,7 +261,8 @@ def ingest_matches(conn, competition_id, season_id):
 
 
 # ============================================================
-# 4. INGEST EVENTS
+# 4. Ingestion des events
+# 4. 事件入库（events 表：传球、射门、带球等）
 # ============================================================
 
 def get_events(match_id):
@@ -550,7 +565,8 @@ def ingest_events(conn, matches_df, max_matches=None):
 
 
 # ============================================================
-# 4b. INGEST MATCH LINEUPS
+# 5. Ingestion des lineups (compositions d'équipe)
+# 5. 首发/换人入库（match_lineups 表）
 # ============================================================
 
 def _parse_minutes_from_timestamp(ts):
@@ -714,7 +730,8 @@ def ingest_match_lineups(conn, matches_df, max_matches=None):
 
 
 # ============================================================
-# 5. INGEST PLAYER SEASON STATS
+# 6. Ingestion des statistiques joueur par saison
+# 6. 球员赛季统计入库（player_season_stats 表：goals_90, xG, passes 等）
 # ============================================================
 
 def ingest_player_season_stats(conn, competition_id, season_id):
@@ -876,7 +893,8 @@ def ingest_player_season_stats(conn, competition_id, season_id):
 
 
 # ============================================================
-# 6. UPDATE PLAYER INFO FROM PLAYER MAPPING API
+# 7. Mise à jour infos joueur (StatsBomb player mapping API)
+# 7. 从 StatsBomb player mapping API 更新球员身高、体重、生日等
 # ============================================================
 
 def update_player_info_from_mapping(conn, competition_id, season_id):
@@ -950,7 +968,7 @@ def update_player_info_from_mapping(conn, competition_id, season_id):
 
 
 # ============================================================
-# MAIN FUNCTION - Run full StatsBomb ingestion
+# Fonction principale / 主入口
 # ============================================================
 
 def run_statsbomb_ingestion(conn=None, max_event_matches=None):

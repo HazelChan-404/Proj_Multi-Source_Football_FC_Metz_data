@@ -1,5 +1,16 @@
 """
 Transfermarkt scraping - valeur marché, contrat, agent, etc.
+Transfermarkt 爬虫模块 - 转会身价、合同、经纪人等
+
+Vue d'ensemble / 功能概述 :
+  - 从 Transfermarkt 网页抓取 Ligue 1 球队与球员信息（无 API）
+  - 球队列表 → 各队球员 → 球员详情页（合同到期、经纪人、身高、惯用脚等）
+  - 存入 players 表，与 StatsBomb/SkillCorner 球员通过姓名匹配关联
+  - market_value, contract_expiry, agent, height_cm, preferred_foot 等
+
+Flux / 执行顺序 :
+  get_ligue1_teams → get_team_players → [get_player_detail] → store_transfermarkt_data
+  → [fill_null_transfermarkt_details 增量补全缺失详情]
 """
 
 import re
@@ -43,7 +54,8 @@ def make_request(url, max_retries=3):
 
 
 # ============================================================
-# 1. GET ALL TEAM URLS FROM LIGUE 1 PAGE
+# 1. Récupération des équipes Ligue 1
+# 1. 获取 Ligue 1 球队列表（从 Transfermarkt 联赛页面解析）
 # ============================================================
 
 def get_ligue1_teams():
@@ -99,7 +111,8 @@ def get_ligue1_teams():
 
 
 # ============================================================
-# 2. GET PLAYERS FROM TEAM PAGE
+# 2. Récupération des joueurs par équipe
+# 2. 从球队页面获取球员列表（姓名、身价、球衣号等）
 # ============================================================
 
 def get_team_players(team_url, team_name):
@@ -280,7 +293,8 @@ def parse_market_value(value_str):
 
 
 # ============================================================
-# 3. GET DETAILED PLAYER INFO
+# 3. Détails joueur (page individuelle)
+# 3. 球员详情页（合同到期、经纪人、身高、惯用脚、生日等）
 # ============================================================
 
 def get_player_detail(player_url):
@@ -371,7 +385,8 @@ def get_player_detail(player_url):
 
 
 # ============================================================
-# 4. STORE TRANSFERMARKT DATA IN DATABASE
+# 4. Stockage en base (players + player_id_mapping)
+# 4. 入库（更新已有球员或插入新球员，通过姓名匹配关联）
 # ============================================================
 
 def store_transfermarkt_data(conn, players_data):
@@ -488,9 +503,9 @@ def store_transfermarkt_data(conn, players_data):
 
 
 # ============================================================
-# 5. FILL NULLS - Incremental detail scrape for players missing contract/agent
+# 5. Remplissage des champs manquants (scrape détail incrémental)
+# 5. 增量补全（仅对 contract/agent 等仍为空且有 TM URL 的球员爬详情）
 # ============================================================
-
 
 def fill_null_transfermarkt_details(conn=None, max_players=None):
     """
@@ -565,9 +580,8 @@ def fill_null_transfermarkt_details(conn=None, max_players=None):
 
 
 # ============================================================
-# MAIN FUNCTION - Run full Transfermarkt scraping
+# Fonction principale / 主入口
 # ============================================================
-
 
 def run_transfermarkt_scraping(conn=None, detailed=False, fill_nulls_only=False):
     """

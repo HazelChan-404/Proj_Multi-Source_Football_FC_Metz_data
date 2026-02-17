@@ -1,5 +1,12 @@
 """
 Backfill player_match_physical depuis raw_physical_json.
+从 raw_physical_json 解析并填充体能数据的数值列（距离、速度、冲刺等）
+
+Contexte / 适用场景 :
+  SkillCorner API 曾变更字段名（如 minutes_full_all, total_distance_full_all）。
+  旧记录只存了 raw_physical_json，数值列为空。此脚本解析 JSON 并补全。
+
+Usage: python backfill/backfill_physical_from_raw.py
 """
 
 import json
@@ -11,6 +18,10 @@ from src.database import get_connection, table
 
 
 def get_metric(record, *keys):
+    """
+    Prend la première clé présente dans le record (API peut varier les noms).
+    从 record 中按 keys 顺序取第一个非空值（兼容 API 字段名变化）
+    """
     for key in keys:
         val = record.get(key)
         if val is not None:
@@ -22,6 +33,8 @@ def main():
     conn = get_connection()
     cur = conn.cursor()
 
+    # Récupérer tous les enregistrements avec raw_physical_json
+    # 取出所有有 raw_physical_json 的体能记录
     cur.execute(
         f"SELECT physical_id, raw_physical_json FROM {table('player_match_physical')}"
     )
@@ -36,6 +49,8 @@ def main():
         except Exception:
             continue
 
+        # Extraire les métriques depuis le JSON (plusieurs noms possibles selon version API)
+        # 从 JSON 中提取指标（兼容多种字段名：SkillCorner 新旧版）
         minutes = get_metric(
             record, "minutes_full_all", "minutes_played", "minutes"
         )
@@ -75,6 +90,8 @@ def main():
             "high_speed_run_count",
         )
 
+        # Mettre à jour les colonnes numériques (COALESCE = ne pas écraser si déjà rempli)
+        # 更新数值列，COALESCE 表示：仅当列为空时才写入，不覆盖已有值
         cur.execute(
             f"""
             UPDATE {table('player_match_physical')} SET

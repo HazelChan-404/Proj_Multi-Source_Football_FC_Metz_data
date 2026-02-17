@@ -1,5 +1,14 @@
 """
 SkillCorner ingestion - teams, matches, players, physical.
+SkillCorner 入库模块 - 球队、比赛、球员、体能数据
+
+Vue d'ensemble / 功能概述 :
+  - 通过 SkillCorner API 拉取 Ligue 1 体能/追踪数据
+  - 将 teams、matches、players 与 StatsBomb 已有数据关联（按名称匹配）
+  - 体能数据写入 player_match_physical（距离、速度、冲刺等）
+
+Flux / 执行顺序 :
+  find_ligue1_edition → ingest_teams → ingest_matches → ingest_players → ingest_physical_data
 """
 
 import json
@@ -23,12 +32,13 @@ def get_client():
 
 
 # ============================================================
-# 1. DISCOVER COMPETITIONS, SEASONS & EDITIONS
+# 1. Découverte compétitions / saisons / éditions
+# 1. 发现联赛、赛季、赛事版本
 # ============================================================
 
 def get_seasons(client):
     """Fetch all available seasons from SkillCorner."""
-    print("📡 Fetching SkillCorner seasons...")
+    print(" Fetching SkillCorner seasons...")
     seasons = client.get_seasons()
     print(f"   Found {len(seasons)} seasons")
     return seasons
@@ -36,7 +46,7 @@ def get_seasons(client):
 
 def get_competitions(client, season_id=None):
     """Fetch competitions, optionally filtered by season."""
-    print("📡 Fetching SkillCorner competitions...")
+    print(" Fetching SkillCorner competitions...")
     params = {}
     if season_id:
         params['season'] = season_id
@@ -66,7 +76,7 @@ def find_ligue1_edition(client):
         try:
             competitions = get_competitions(client, season_id=season_id)
         except Exception as e:
-            print(f"   ⚠️  Error fetching competitions for season {season_id}: {e}")
+            print(f"    Error fetching competitions for season {season_id}: {e}")
             continue
 
         for comp in competitions:
@@ -99,7 +109,7 @@ def find_ligue1_edition(client):
                     ed_comp_name = ed_comp.get('name', '') if isinstance(ed_comp, dict) else ''
 
                     if 'ligue 1' in ed_name.lower() or 'ligue 1' in ed_comp_name.lower():
-                        print(f"   🎯 Found edition: {ed_name} (id={ed_id})")
+                        print(f"   Found edition: {ed_name} (id={ed_id})")
                         return ed_id, season
 
                 # If no edition found from filtering, try listing all editions for the competition
@@ -115,7 +125,7 @@ def find_ligue1_edition(client):
                             reverse=True
                         )[0]
                         ed_id = latest_edition.get('id')
-                        print(f"   🎯 Found latest edition: id={ed_id}")
+                        print(f"  Found latest edition: id={ed_id}")
                         return ed_id, season
                 except Exception:
                     pass
@@ -131,26 +141,27 @@ def find_ligue1_edition(client):
             ed_comp_name = ed_comp.get('name', '') if isinstance(ed_comp, dict) else ''
             if 'ligue 1' in ed_name.lower() or 'ligue 1' in ed_comp_name.lower():
                 ed_id = edition.get('id')
-                print(f"   🎯 Found edition (fallback): {ed_name} (id={ed_id})")
+                print(f"   Found edition (fallback): {ed_name} (id={ed_id})")
                 return ed_id, None
     except Exception as e:
-        print(f"   ⚠️  Fallback failed: {e}")
+        print(f"    Fallback failed: {e}")
 
     return None, None
 
 
 # ============================================================
-# 2. INGEST TEAMS FROM SKILLCORNER
+# 2. Ingestion des équipes
+# 2. 球队入库：按名称关联已有 teams，更新 skillcorner_team_id
 # ============================================================
 
 def ingest_teams(conn, client, competition_edition_id):
     """Fetch and store SkillCorner teams, linking to existing teams by name."""
-    print(f"📡 Fetching SkillCorner teams for edition {competition_edition_id}...")
+    print(f" Fetching SkillCorner teams for edition {competition_edition_id}...")
 
     try:
         teams = client.get_teams(params={'competition_edition': competition_edition_id})
     except Exception as e:
-        print(f"    Error fetching teams: {e}")
+        print(f"  Error fetching teams: {e}")
         return []
 
     cursor = conn.cursor()
@@ -191,17 +202,18 @@ def ingest_teams(conn, client, competition_edition_id):
 
 
 # ============================================================
-# 3. INGEST MATCHES FROM SKILLCORNER
+# 3. Ingestion des matchs
+# 3. 比赛入库：按日期+主客队名关联 StatsBomb matches，更新 skillcorner_match_id
 # ============================================================
 
 def ingest_matches(conn, client, competition_edition_id):
     """Fetch and link SkillCorner matches to existing StatsBomb matches."""
-    print(f"📡 Fetching SkillCorner matches for edition {competition_edition_id}...")
+    print(f" Fetching SkillCorner matches for edition {competition_edition_id}...")
 
     try:
         matches = client.get_matches(params={'competition_edition': competition_edition_id})
     except Exception as e:
-        print(f"   ⚠️  Error fetching matches: {e}")
+        print(f"   Error fetching matches: {e}")
         return []
 
     cursor = conn.cursor()
@@ -283,12 +295,13 @@ def ingest_matches(conn, client, competition_edition_id):
                   home_score, away_score))
 
     conn.commit()
-    print(f"✅ Linked {linked} matches with StatsBomb, processed {len(matches)} total")
+    print(f"Linked {linked} matches with StatsBomb, processed {len(matches)} total")
     return matches
 
 
 # ============================================================
-# 4. INGEST PLAYERS FROM SKILLCORNER
+# 4. Ingestion des joueurs
+# 4. 球员入库：按名称匹配已有 players，更新 skillcorner_player_id；新球员则 INSERT
 # ============================================================
 
 def ingest_players(conn, client, competition_edition_id):
@@ -308,7 +321,7 @@ def ingest_players(conn, client, competition_edition_id):
             players = client.get_players(params={'team': sc_team_id})
             time.sleep(0.3)  # Rate limiting
         except Exception as e:
-            print(f"   ⚠️  Error fetching players for team {team_name}: {e}")
+            print(f"  Error fetching players for team {team_name}: {e}")
             continue
 
         for player in players:
@@ -395,12 +408,13 @@ def ingest_players(conn, client, competition_edition_id):
                 count += 1
 
     conn.commit()
-    print(f"✅ Processed {count} players from SkillCorner")
+    print(f"Processed {count} players from SkillCorner")
     return count
 
 
 # ============================================================
-# 5. INGEST PHYSICAL DATA FROM SKILLCORNER
+# 5. Ingestion des données physiques (tracking)
+# 5. 体能数据入库：距离、速度、冲刺等，写入 player_match_physical
 # ============================================================
 
 def ingest_physical_data(conn, client, competition_edition_id):
@@ -408,7 +422,7 @@ def ingest_physical_data(conn, client, competition_edition_id):
     Fetch physical/tracking data per player per match from SkillCorner.
     This is the core SkillCorner data: speed, distance, sprints, etc.
     """
-    print("📡 Fetching SkillCorner physical data...")
+    print("Fetching SkillCorner physical data...")
 
     cursor = conn.cursor()
 
@@ -422,7 +436,7 @@ def ingest_physical_data(conn, client, competition_edition_id):
     total_records = 0
 
     for team_id, team_name, sc_team_id in sc_teams:
-        print(f"   📊 Fetching physical data for {team_name}...")
+        print(f" Fetching physical data for {team_name}...")
 
         try:
             physical_data = client.get_physical(
@@ -430,7 +444,7 @@ def ingest_physical_data(conn, client, competition_edition_id):
             )
             time.sleep(0.5)  # Rate limiting
         except Exception as e:
-            print(f"   ⚠️  Error fetching physical data for {team_name}: {e}")
+            print(f"  Error fetching physical data for {team_name}: {e}")
             continue
 
         if not physical_data:
@@ -633,23 +647,19 @@ def ingest_physical_data(conn, client, competition_edition_id):
             conn.commit()
 
     conn.commit()
-    print(f"✅ Stored {total_records} physical data records")
+    print(f"Stored {total_records} physical data records")
     return total_records
 
 
 # ============================================================
-# MAIN FUNCTION - Run full SkillCorner ingestion
+# Fonction principale / 主入口
 # ============================================================
 
 def run_skillcorner_ingestion(conn=None):
     """
-    Run the full SkillCorner data ingestion pipeline.
-    
-    Args:
-        conn: SQLite connection (creates one if None)
-    
-    Returns:
-        competition_edition_id
+    Exécute le pipeline complet SkillCorner.
+    执行完整 SkillCorner 入库流程。
+    Returns: competition_edition_id
     """
     if conn is None:
         conn = get_connection()
@@ -665,7 +675,7 @@ def run_skillcorner_ingestion(conn=None):
     edition_id, season_info = find_ligue1_edition(client)
 
     if not edition_id:
-        print("❌ Could not find Ligue 1 competition edition!")
+        print("Could not find Ligue 1 competition edition!")
         print("   Attempting to use all available data...")
         # Try to get any available data
         try:
@@ -676,7 +686,7 @@ def run_skillcorner_ingestion(conn=None):
                 for m in matches[:5]:
                     print(f"   Sample match: {m}")
         except Exception as e:
-            print(f"   ⚠️  Error: {e}")
+            print(f"  error: {e}")
         return None
 
     print(f"\n   Using competition edition: {edition_id}")
@@ -693,7 +703,7 @@ def run_skillcorner_ingestion(conn=None):
     # 6. Ingest physical data
     ingest_physical_data(conn, client, edition_id)
 
-    print("\n✅ SkillCorner ingestion complete!")
+    print("\nSkillCorner ingestion complete!")
     return edition_id
 
 

@@ -7,7 +7,7 @@ Ce script vérifie les permissions du compte StatsBomb et affiche :
 - Le total de matchs disponibles
 
 Utilisation :
-    python scripts/test_statsbomb_access.py
+    python API/statsbomb_access_test2.py
 
 Documentation API : https://classic.statsbomb.hudl.com/
 """

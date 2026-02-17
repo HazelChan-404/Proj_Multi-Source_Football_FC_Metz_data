@@ -1,7 +1,13 @@
+#record the dependencies
 statsbombpy>=1.0.0
 psycopg2-binary>=2.9.0
 skillcorner>=2.2.0
+#pandas for the data analysis
 pandas>=1.5.0
+#requests for the web scraping
 requests>=2.28.0
+#beautifulsoup for the web scraping
 beautifulsoup4>=4.11.0
+#lxml for the web scraping
 lxml>=4.9.0
+#time for the time delay

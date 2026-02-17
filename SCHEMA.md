@@ -155,4 +155,63 @@ Table dérivée calculée par `data_fusion.build_player_fused()` :
 
 ---
 
+## 7. Choix des colonnes et colonnes NULL / 列选择与 NULL 含义
+
+### Comment les colonnes sont choisies / 列如何选择
+
+Les colonnes correspondent aux **champs fournis par chaque source** :
+
+| Source | Tables concernées | Colonnes |
+|--------|-------------------|----------|
+| **StatsBomb** | events, match_lineups, player_season_stats | Champs du schema StatsBomb Open Data |
+| **SkillCorner** | player_match_physical | Distance, sprints, vitesse (tracking) |
+| **Transfermarkt** | players | market_value, contract_expiry, agent, etc. |
+
+L'objectif : stocker toutes les données utiles des 3 sources dans un modèle unifié.
+
+### Colonnes souvent NULL — signification / 常见空列的含义
+
+#### Type 1 : Table large sparse (`events`)
+
+Chaque ligne = un **événement unique**. Les colonnes dépendent du `event_type` :
+
+| event_type | Colonnes remplies | Colonnes NULL |
+|------------|-------------------|---------------|
+| Pass | pass_length, pass_angle, pass_end_location_* | shot_*, carry_*, dribble_* |
+| Shot | shot_statsbomb_xg, shot_outcome, shot_end_location_* | pass_*, carry_* |
+| Carry | carry_end_location_* | pass_*, shot_* |
+| Dribble | dribble_outcome | pass_*, shot_*, carry_* |
+
+**Usage** : filtrer par `event_type` et ne lire que les colonnes pertinentes.
+
+#### Type 2 : Multi-sources (`players`)
+
+Chaque source remplit des colonnes différentes. NULL = cette source n’a pas fourni la donnée.
+
+| Colonne | Source | NULL si |
+|---------|--------|---------|
+| statsbomb_player_id | StatsBomb | Joueur absent des lineups/events StatsBomb |
+| skillcorner_player_id | SkillCorner | Match sans données SkillCorner |
+| transfermarkt_player_id | Transfermarkt | Scraping non trouvé ou non matché |
+| market_value, contract_expiry | Transfermarkt | TM non scrapé ou infos manquantes |
+| height_cm, weight_kg | SB Mapping / TM | Ces API n’ont pas ces champs |
+
+**Usage** : `WHERE xxx IS NOT NULL` ou `COALESCE` dans les requêtes.
+
+#### Type 3 : Spécifique position (`player_season_stats`)
+
+Certaines stats ne concernent que certains postes :
+
+| Colonne | Applicable à | NULL pour |
+|---------|---------------|-----------|
+| save_ratio, goals_faced_90, gsaa_90 | Gardiens | Joueurs de champ |
+| shots_90, np_xg_90 | Attaquants / milieux | (rarement, mais peut être faible) |
+
+### Recommandation / 建议
+
+- **Ne pas supprimer** les colonnes NULL : elles ont une sémantique.
+- Pour l’analyse, filtrer par type / source / poste selon le besoin.
+
+---
+
 *Document généré dans le cadre du mini-projet base de données multi-sources — Ligue 1*

@@ -106,11 +106,11 @@ python main.py --transfermarkt --detailed-tm
 python main.py --fill-tm-nulls
 
 # Test d'accès StatsBomb
-python scripts/test_statsbomb_access.py
+python API/statsbomb_access_test2.py
 
 # Backfill match_lineups (compositions d'équipe) si la table est vide
-python scripts/backfill_lineups.py
-python scripts/backfill_lineups.py --limit 20  # limite à 20 matchs
+python backfill/backfill_lineups.py
+python backfill/backfill_lineups.py --limit 20  # limite à 20 matchs
 ```
 
 ---
@@ -168,9 +168,11 @@ Algo_FC_Metz/
 │   ├── transfermarkt_scraper.py
 │   ├── id_mapping.py        # Correspondance SB ↔ SC ↔ TM
 │   └── data_fusion.py       # Construction de player_fused
-├── scripts/
-│   ├── test_statsbomb_access.py
+├── backfill/
+│   ├── backfill_lineups.py
 │   └── backfill_physical_from_raw.py
+├── API/
+│   └── statsbomb_access_test2.py   # Test accès StatsBomb
 └── notebooks/
     └── api_access.ipynb    # Exploration des APIs
 ```
