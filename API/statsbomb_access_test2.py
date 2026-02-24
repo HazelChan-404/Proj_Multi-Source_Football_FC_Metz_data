@@ -27,7 +27,7 @@ def main():
     creds = STATSBOMB_CREDS
 
     print("=" * 70)
-    print("📡 TEST D'ACCÈS À L'API STATSBOMB")
+    print("TEST D'ACCÈS À L'API STATSBOMB")
     print("=" * 70)
     print(f"\nCompte : {creds['user']}")
     print("Vérification des compétitions et matchs accessibles...\n")
