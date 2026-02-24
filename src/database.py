@@ -122,6 +122,19 @@ def create_schema(conn=None):
         )
     """)
 
+    # 5b. PLAYER_MANUAL_MAPPING - correspondances manuelles SB/SC/TM
+    # 手动映射表：已知但自动匹配失败的 SB↔SC↔TM 对应
+    cur.execute(f"""
+        CREATE TABLE IF NOT EXISTS {table("player_manual_mapping")} (
+            manual_id                 SERIAL PRIMARY KEY,
+            statsbomb_player_id       INTEGER,
+            skillcorner_player_id     INTEGER,
+            transfermarkt_player_id   TEXT,
+            notes                     TEXT,
+            created_at                TIMESTAMP DEFAULT NOW()
+        )
+    """)
+
     # 6. PLAYER_ID_MAPPING
     cur.execute(f"""
         CREATE TABLE IF NOT EXISTS {table("player_id_mapping")} (

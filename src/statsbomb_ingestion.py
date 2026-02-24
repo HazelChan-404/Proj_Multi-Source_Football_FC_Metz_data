@@ -179,7 +179,8 @@ def ingest_matches(conn, competition_id, season_id):
         cursor.execute(f"""
             INSERT INTO {table("teams")} (team_name, statsbomb_team_id, country, gender)
             VALUES (%s, %s, %s, %s)
-            ON CONFLICT (team_name) DO NOTHING
+            ON CONFLICT (team_name) DO UPDATE SET
+                statsbomb_team_id = COALESCE({table("teams")}.statsbomb_team_id, EXCLUDED.statsbomb_team_id)
         """, (
             home_team_name,
             home_team_sb_id,
@@ -187,7 +188,6 @@ def ingest_matches(conn, competition_id, season_id):
             home_team_gender or ''
         ))
 
-        # Get home team internal id
         cursor.execute(f"SELECT team_id FROM {table('teams')} WHERE team_name = %s", (home_team_name,))
         home_team_result = cursor.fetchone()
         home_team_id = home_team_result[0] if home_team_result else None
@@ -211,7 +211,8 @@ def ingest_matches(conn, competition_id, season_id):
         cursor.execute(f"""
             INSERT INTO {table("teams")} (team_name, statsbomb_team_id, country, gender)
             VALUES (%s, %s, %s, %s)
-            ON CONFLICT (team_name) DO NOTHING
+            ON CONFLICT (team_name) DO UPDATE SET
+                statsbomb_team_id = COALESCE({table("teams")}.statsbomb_team_id, EXCLUDED.statsbomb_team_id)
         """, (
             away_team_name,
             away_team_sb_id,
@@ -646,6 +647,13 @@ def ingest_match_lineups(conn, matches_df, max_matches=None):
                 )
                 team_row = cursor.fetchone()
                 internal_team_id = team_row[0] if team_row else None
+
+                # Backfill statsbomb_team_id si manquant (lineups a l'ID précis)
+                if internal_team_id:
+                    cursor.execute(
+                        f"UPDATE {table('teams')} SET statsbomb_team_id = %s WHERE team_id = %s AND statsbomb_team_id IS NULL",
+                        (int(sb_team_id), internal_team_id),
+                    )
 
                 for p in lineup_list:
                     sb_player_id = p.get("player_id")

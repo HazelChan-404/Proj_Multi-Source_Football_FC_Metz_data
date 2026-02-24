@@ -516,19 +516,25 @@ def fill_null_transfermarkt_details(conn=None, max_players=None):
         conn = get_connection()
 
     cursor = conn.cursor()
+    # Inclut joueurs manquant market_value, nationality, height (pas seulement contract/agent)
+    # 包括缺少身价、国籍、身高的球员（不仅是合同/经纪人）
     cursor.execute(
         f"""
         SELECT player_id, transfermarkt_url, player_name
         FROM {table('players')}
         WHERE transfermarkt_url IS NOT NULL
-        AND (contract_expiry IS NULL OR agent IS NULL)
+        AND (
+            contract_expiry IS NULL OR agent IS NULL
+            OR market_value IS NULL OR market_value_numeric IS NULL
+            OR nationality IS NULL OR height_cm IS NULL
+        )
         LIMIT %s
         """,
         (max_players or 9999,),
     )
     rows = cursor.fetchall()
     if not rows:
-        print("   (no players missing contract/agent - skipping detail scrape)")
+        print("   (no players missing TM details - skipping detail scrape)")
         return 0
 
     print(f"   Filling detail for {len(rows)} players missing contract/agent...")

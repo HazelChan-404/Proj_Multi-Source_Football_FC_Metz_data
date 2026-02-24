@@ -4,7 +4,8 @@ SkillCorner 入库模块 - 球队、比赛、球员、体能数据
 
 Vue d'ensemble / 功能概述 :
   - 通过 SkillCorner API 拉取 Ligue 1 体能/追踪数据
-  - 将 teams、matches、players 与 StatsBomb 已有数据关联（按名称匹配）
+  - 将 teams、matches、players 与 StatsBomb 已有数据关联
+  - **Nouvelle méthode / 新方法** : `matching=statsbomb` + statsbomb_id 精确匹配，fallback 按名称
   - 体能数据写入 player_match_physical（距离、速度、冲刺等）
 
 Flux / 执行顺序 :
@@ -19,6 +20,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import SKILLCORNER_USERNAME, SKILLCORNER_PASSWORD
 from src.database import get_connection, table
+from src.id_mapping import normalize_name, name_similarity
 
 
 def get_client():
@@ -150,54 +152,118 @@ def find_ligue1_edition(client):
 
 
 # ============================================================
-# 2. Ingestion des équipes
-# 2. 球队入库：按名称关联已有 teams，更新 skillcorner_team_id
+# 2. Ingestion des équipes (nouvelle méthode : matching=statsbomb + statsbomb_id)
+# 2. 球队入库：优先 statsbomb_id 精确匹配，fallback 按名称
 # ============================================================
 
+# Alias connus : abréviation DB <-> racine SC (ex. Rennes/Rennais) / 已知别名
+_TEAM_NAME_ALIASES = [("rennes", "rennais")]
+
+
+def _team_name_matches(db_name, sc_name):
+    """Matching strict par nom, éviter faux positifs (ex. Lens vs Alajuelense) / 严格名称匹配"""
+    a, b = (db_name or "").lower(), (sc_name or "").lower()
+    if a == b:
+        return True
+    for short, long_root in _TEAM_NAME_ALIASES:
+        if (a == short and long_root in b) or (b == short and long_root in a):
+            return True
+    if a in b:
+        return b.startswith(a) or f" {a}" in b or b.endswith(f" {a}")
+    if b in a:
+        return a.startswith(b) or f" {b}" in a or a.endswith(f" {b}")
+    return False
+
+
+def _find_db_team_by_name(cursor, team_name, sc_team_name):
+    """Find DB team matching sc_team_name or team_name. Returns (team_id,) or None."""
+    # Try exact match first
+    cursor.execute(
+        f"SELECT team_id FROM {table('teams')} WHERE LOWER(team_name) = LOWER(%s)",
+        (team_name or sc_team_name or "",)
+    )
+    r = cursor.fetchone()
+    if r:
+        return r
+    # Try matching against all DB teams
+    cursor.execute(
+        f"SELECT team_id, team_name FROM {table('teams')}"
+    )
+    for row in cursor.fetchall():
+        if _team_name_matches(row[1], team_name or sc_team_name):
+            return (row[0],)
+    return None
+
+
 def ingest_teams(conn, client, competition_edition_id):
-    """Fetch and store SkillCorner teams, linking to existing teams by name."""
-    print(f" Fetching SkillCorner teams for edition {competition_edition_id}...")
+    """Fetch SkillCorner teams via matching=statsbomb, link by statsbomb_id (précis) or name (fallback)."""
+    print(f" Fetching SkillCorner teams (matching=statsbomb + edition {competition_edition_id})...")
 
     try:
-        teams = client.get_teams(params={'competition_edition': competition_edition_id})
+        # 1) Complet matching=statsbomb / 全量
+        teams_sb_all = client.get_teams(params={'matching': 'statsbomb'})
+        sb_lookup = {t['id']: t for t in teams_sb_all}
+
+        # 2) Équipes Ligue 1 de l'édition / 该赛季球队列表
+        teams_ligue1 = client.get_teams(params={'competition_edition': competition_edition_id})
+
+        # 3) Enrichir avec statsbomb_id / 补充 statsbomb_id
+        teams = []
+        for t in teams_ligue1:
+            enriched = sb_lookup.get(t['id'], t)
+            teams.append({**t, 'statsbomb_id': enriched.get('statsbomb_id')})
     except Exception as e:
         print(f"  Error fetching teams: {e}")
         return []
 
     cursor = conn.cursor()
-    count = 0
+    count_id = 0
+    count_name = 0
 
     for team in teams:
         sc_team_id = team.get('id')
         team_name = team.get('name', '')
         short_name = team.get('short_name', '')
+        statsbomb_id = team.get('statsbomb_id')
+        if statsbomb_id is not None:
+            try:
+                statsbomb_id = int(statsbomb_id)
+            except (TypeError, ValueError):
+                statsbomb_id = None
 
-        # Try to match with existing team by name (fuzzy match)
-        cursor.execute(
-            f"SELECT team_id, team_name FROM {table('teams')} WHERE "
-            "LOWER(team_name) LIKE %s OR LOWER(team_name) LIKE %s",
-            (f"%{team_name.lower()}%", f"%{short_name.lower()}%")
-        )
-        existing = cursor.fetchone()
+        existing = None
+
+        # Priorité 1 : match par statsbomb_team_id (ID précis) / 优先 ID 精确匹配
+        if statsbomb_id is not None:
+            cursor.execute(
+                f"SELECT team_id FROM {table('teams')} WHERE statsbomb_team_id = %s",
+                (statsbomb_id,)
+            )
+            existing = cursor.fetchone()
+
+        # Priorité 2 : match par nom (fallback) / 按名称匹配
+        if existing is None:
+            existing = _find_db_team_by_name(cursor, team_name, short_name or team_name)
 
         if existing:
-            # Update existing team with SkillCorner ID
             cursor.execute(
                 f"UPDATE {table('teams')} SET skillcorner_team_id = %s WHERE team_id = %s",
                 (sc_team_id, existing[0])
             )
-            count += 1
+            if statsbomb_id is not None:
+                count_id += 1
+            else:
+                count_name += 1
         else:
-            # Insert new team
             cursor.execute(f"""
                 INSERT INTO {table('teams')} (team_name, skillcorner_team_id)
                 VALUES (%s, %s)
                 ON CONFLICT (team_name) DO UPDATE SET skillcorner_team_id = EXCLUDED.skillcorner_team_id
             """, (team_name, sc_team_id))
-            count += 1
+            count_name += 1
 
     conn.commit()
-    print(f" Processed {count} teams from SkillCorner")
+    print(f" Processed {count_id + count_name} teams (ID précis: {count_id}, par nom: {count_name})")
     return teams
 
 
@@ -225,10 +291,14 @@ def ingest_matches(conn, client, competition_edition_id):
 
         home_team = match.get('home_team', {})
         away_team = match.get('away_team', {})
-        home_name = home_team.get('name', '') if isinstance(home_team, dict) else ''
-        away_name = away_team.get('name', '') if isinstance(away_team, dict) else ''
+        home_team = home_team if isinstance(home_team, dict) else {}
+        away_team = away_team if isinstance(away_team, dict) else {}
+        home_name = home_team.get('name', '')
+        away_name = away_team.get('name', '')
+        sc_home_id = home_team.get('id')
+        sc_away_id = away_team.get('id')
 
-        # Skip if this SkillCorner match_id is already linked (prevents unique violation)
+        # Skip if this SkillCorner match_id is already linked
         cursor.execute(
             f"SELECT 1 FROM {table('matches')} WHERE skillcorner_match_id = %s LIMIT 1",
             (sc_match_id,)
@@ -236,19 +306,33 @@ def ingest_matches(conn, client, competition_edition_id):
         if cursor.fetchone():
             continue
 
-        # Try to link to existing match by date and team names
-        cursor.execute(f"""
-            SELECT m.match_id FROM {table('matches')} m
-            JOIN {table('teams')} h ON m.home_team_id = h.team_id
-            JOIN {table('teams')} a ON m.away_team_id = a.team_id
-            WHERE m.match_date = %s
-            AND (LOWER(h.team_name) LIKE %s OR LOWER(h.team_name) LIKE %s)
-        """, (
-            match_date,
-            f"%{home_name.lower().split()[0]}%" if home_name else '%',
-            f"%{home_name.lower()}%"
-        ))
-        existing = cursor.fetchone()
+        existing = None
+
+        # Priorité 1 : match par date + skillcorner_team_id (ID précis) / 优先 ID 精确匹配
+        if sc_home_id is not None and sc_away_id is not None:
+            cursor.execute(f"""
+                SELECT m.match_id FROM {table('matches')} m
+                JOIN {table('teams')} h ON m.home_team_id = h.team_id
+                JOIN {table('teams')} a ON m.away_team_id = a.team_id
+                WHERE m.match_date = %s
+                AND h.skillcorner_team_id = %s AND a.skillcorner_team_id = %s
+            """, (match_date, sc_home_id, sc_away_id))
+            existing = cursor.fetchone()
+
+        # Priorité 2 : match par date + noms (fallback) / 按日期+名称
+        if existing is None:
+            cursor.execute(f"""
+                SELECT m.match_id FROM {table('matches')} m
+                JOIN {table('teams')} h ON m.home_team_id = h.team_id
+                JOIN {table('teams')} a ON m.away_team_id = a.team_id
+                WHERE m.match_date = %s
+                AND (LOWER(h.team_name) LIKE %s OR LOWER(h.team_name) LIKE %s)
+            """, (
+                match_date,
+                f"%{home_name.lower().split()[0]}%" if home_name else '%',
+                f"%{home_name.lower()}%"
+            ))
+            existing = cursor.fetchone()
 
         if existing:
             # Only update if target match does not yet have a SkillCorner link
@@ -260,11 +344,19 @@ def ingest_matches(conn, client, competition_edition_id):
             if cursor.rowcount > 0:
                 linked += 1
         else:
-            # Insert as new match if it can't be linked
-            # Try to find team IDs
+            # Insert as new match if it can't be linked / 无法关联则插入新比赛
             home_team_id = None
             away_team_id = None
-            if home_name:
+            # Priorité : skillcorner_team_id puis nom / 优先 ID 再按名称
+            if sc_home_id is not None:
+                cursor.execute(
+                    f"SELECT team_id FROM {table('teams')} WHERE skillcorner_team_id = %s",
+                    (sc_home_id,)
+                )
+                ht = cursor.fetchone()
+                if ht:
+                    home_team_id = ht[0]
+            if home_team_id is None and home_name:
                 cursor.execute(
                     f"SELECT team_id FROM {table('teams')} WHERE LOWER(team_name) LIKE %s",
                     (f"%{home_name.lower()}%",)
@@ -273,7 +365,15 @@ def ingest_matches(conn, client, competition_edition_id):
                 if ht:
                     home_team_id = ht[0]
 
-            if away_name:
+            if sc_away_id is not None:
+                cursor.execute(
+                    f"SELECT team_id FROM {table('teams')} WHERE skillcorner_team_id = %s",
+                    (sc_away_id,)
+                )
+                at = cursor.fetchone()
+                if at:
+                    away_team_id = at[0]
+            if away_team_id is None and away_name:
                 cursor.execute(
                     f"SELECT team_id FROM {table('teams')} WHERE LOWER(team_name) LIKE %s",
                     (f"%{away_name.lower()}%",)
@@ -305,12 +405,26 @@ def ingest_matches(conn, client, competition_edition_id):
 # ============================================================
 
 def ingest_players(conn, client, competition_edition_id):
-    """Fetch SkillCorner players and link to existing players by name."""
+    """
+    Récupère les joueurs SkillCorner et les associe aux joueurs existants par nom.
+    拉取 SkillCorner 球员，按名称关联到已有球员。
+
+    Matching : requête SQL d'abord, puis fallback similarité (normalize_name, accents, traits d'union).
+    匹配：先 SQL 精确/LIKE，再按相似度（归一化名称、重音、连字符）回退。
+    """
     print("📡 Fetching SkillCorner players...")
 
     cursor = conn.cursor()
 
-    # Get all teams for this competition
+    # Précharger les joueurs SB sans SC pour fallback fuzzy / 预加载无 SC 的 SB 球员，用于模糊回退
+    cursor.execute(f"""
+        SELECT player_id, player_name, statsbomb_player_name
+        FROM {table('players')}
+        WHERE statsbomb_player_id IS NOT NULL AND skillcorner_player_id IS NULL
+    """)
+    sb_without_sc = cursor.fetchall()
+
+    # Get all teams for this competition / 获取该赛季所有球队
     cursor.execute(f"SELECT team_name, skillcorner_team_id FROM {table('teams')} WHERE skillcorner_team_id IS NOT NULL")
     sc_teams = cursor.fetchall()
 
@@ -379,10 +493,24 @@ def ingest_players(conn, client, competition_edition_id):
                 if existing:
                     break
 
+            # Fallback : similarité de noms (accents, traits d'union) / 回退：名称相似度（重音、连字符）
+            if existing is None and sb_without_sc:
+                sc_name = full_name or player_name
+                best = None
+                best_score = 0.0
+                for sb_pid, sb_pname, sb_sbname in sb_without_sc:
+                    db_name = sb_sbname or sb_pname or ""
+                    score = name_similarity(sc_name, db_name)
+                    if score >= 0.65 and score > best_score:
+                        best_score = score
+                        best = (sb_pid,)
+                if best:
+                    existing = best
+
             display_name = full_name or player_name
 
             if existing:
-                # Update existing player with SkillCorner info
+                # Update existing player with SkillCorner info / 更新已有球员的 SkillCorner 信息
                 cursor.execute(
                     f"""
                     UPDATE {table('players')} SET
@@ -394,6 +522,8 @@ def ingest_players(conn, client, competition_edition_id):
                     (sc_player_id, display_name, existing[0]),
                 )
                 count += 1
+                # Retirer du cache pour éviter double match / 从缓存移除，避免重复匹配
+                sb_without_sc = [p for p in sb_without_sc if p[0] != existing[0]]
             else:
                 # Insert new player
                 cursor.execute(
@@ -603,21 +733,29 @@ def ingest_physical_data(conn, client, competition_edition_id):
                     running_dist,
                     hsr_dist,
                     sprint_dist,
-                    get_metric(record, "top_speed", "max_speed", "peak_speed"),
-                    get_metric(record, "average_speed", "avg_speed"),
+                    get_metric(
+                        record,
+                        "top_speed", "max_speed", "peak_speed", "peak_velocity",
+                        "max_speed_kmh", "top_speed_kmh",
+                    ),
+                    get_metric(
+                        record,
+                        "average_speed", "avg_speed", "avg_speed_kmh",
+                        "mean_speed", "mean_velocity",
+                    ),
                     sprint_count,
                     hsr_count,
                     get_metric(
                         record,
-                        "acceleration_count",
-                        "num_accelerations",
-                        "accelerations",
+                        "acceleration_count", "num_accelerations",
+                        "accelerations", "acceleration_count_full_all",
+                        "num_accelerations_full_all", "explosive_accelerations",
                     ),
                     get_metric(
                         record,
-                        "deceleration_count",
-                        "num_decelerations",
-                        "decelerations",
+                        "deceleration_count", "num_decelerations",
+                        "decelerations", "deceleration_count_full_all",
+                        "num_decelerations_full_all",
                     ),
                     get_metric(
                         record,
