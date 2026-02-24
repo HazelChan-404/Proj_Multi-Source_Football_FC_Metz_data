@@ -89,9 +89,28 @@ def main():
             "hsr_count_full_all",
             "high_speed_run_count",
         )
+        max_speed = get_metric(
+            record,
+            "top_speed", "max_speed", "peak_speed", "peak_velocity",
+            "max_speed_kmh", "top_speed_kmh",
+        )
+        avg_speed = get_metric(
+            record,
+            "average_speed", "avg_speed", "avg_speed_kmh",
+            "mean_speed", "mean_velocity",
+        )
+        num_accel = get_metric(
+            record,
+            "acceleration_count", "num_accelerations", "accelerations",
+            "acceleration_count_full_all", "num_accelerations_full_all",
+        )
+        num_decel = get_metric(
+            record,
+            "deceleration_count", "num_decelerations", "decelerations",
+            "deceleration_count_full_all", "num_decelerations_full_all",
+        )
 
         # Mettre à jour les colonnes numériques (COALESCE = ne pas écraser si déjà rempli)
-        # 更新数值列，COALESCE 表示：仅当列为空时才写入，不覆盖已有值
         cur.execute(
             f"""
             UPDATE {table('player_match_physical')} SET
@@ -101,7 +120,11 @@ def main():
                 high_speed_running_m = COALESCE(%s, high_speed_running_m),
                 sprinting_distance_m = COALESCE(%s, sprinting_distance_m),
                 num_sprints = COALESCE(%s, num_sprints),
-                num_high_speed_runs = COALESCE(%s, num_high_speed_runs)
+                num_high_speed_runs = COALESCE(%s, num_high_speed_runs),
+                max_speed_kmh = COALESCE(%s, max_speed_kmh),
+                avg_speed_kmh = COALESCE(%s, avg_speed_kmh),
+                num_accelerations = COALESCE(%s, num_accelerations),
+                num_decelerations = COALESCE(%s, num_decelerations)
             WHERE physical_id = %s
             """,
             (
@@ -112,6 +135,10 @@ def main():
                 sprint_dist,
                 sprint_count,
                 hsr_count,
+                max_speed,
+                avg_speed,
+                num_accel,
+                num_decel,
                 physical_id,
             ),
         )
