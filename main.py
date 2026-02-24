@@ -25,7 +25,7 @@ def _run_step(name, runner, **kwargs):
     try:
         runner(conn, **kwargs)
     except Exception as e:
-        print(f"\n❌ {name} error: {e}")
+        print(f"\n {name} error: {e}")
         import traceback
         traceback.print_exc()
     finally:
@@ -45,6 +45,8 @@ def main():
                         help='Remplir contract/agent manquants')
     parser.add_argument('--fill-tm-limit', type=int, default=None)
     parser.add_argument('--mapping', action='store_true', help='ID mapping uniquement')
+    parser.add_argument('--export-candidates', action='store_true',
+                        help='Exporter paires 0.60–0.65 (SB-SC) et 0.65–0.70 (TM-SB) pour revue manuelle')
     parser.add_argument('--summary', action='store_true', help='Résumé DB uniquement')
     parser.add_argument('--max-events', type=int, default=None, help='Limite matchs events')
 
@@ -99,7 +101,7 @@ def main():
             from src.transfermarkt_scraper import fill_null_transfermarkt_details
             fill_null_transfermarkt_details(conn, max_players=getattr(args, "fill_tm_limit", None))
         except Exception as e:
-            print(f"\n❌ Fill TM nulls error: {e}")
+            print(f"\n Fill TM nulls error: {e}")
             import traceback
             traceback.print_exc()
         finally:
@@ -113,10 +115,10 @@ def main():
     if run_all or args.mapping:
         conn = get_connection()
         try:
-            attempt_fuzzy_matching(conn)
+            attempt_fuzzy_matching(conn, export_candidates=getattr(args, 'export_candidates', False))
             build_player_id_mapping(conn)
         except Exception as e:
-            print(f"\n❌ ID mapping error: {e}")
+            print(f"\n ID mapping error: {e}")
             import traceback
             traceback.print_exc()
         finally:
@@ -127,7 +129,7 @@ def main():
     try:
         build_player_fused(conn)
     except Exception as e:
-        print(f"\n❌ Data fusion error: {e}")
+        print(f"\n Data fusion error: {e}")
         import traceback
         traceback.print_exc()
     finally:
@@ -139,8 +141,8 @@ def main():
     conn.close()
 
     elapsed = time.time() - start_time
-    print(f"\n⏱️  Total time: {elapsed:.1f}s")
-    print(f"✅ Pipeline terminé. Schema: {DB_SCHEMA}")
+    print(f"\n  Total time: {elapsed:.1f}s")
+    print(f" Pipeline terminé. Schema: {DB_SCHEMA}")
 
 
 if __name__ == "__main__":
