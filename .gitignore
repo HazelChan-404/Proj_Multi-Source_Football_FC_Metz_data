@@ -18,8 +18,13 @@ build/
 *.swo
 .DS_Store
 
-# Documentation (ne pas versionner)
-docs/
+# Documentation (généralement non versionnée)
+docs/*
+# Sauf les 4 fichiers ID mapping à partager
+!docs/candidates_sb_sc.txt
+!docs/candidates_tm_sb.txt
+!docs/missing_sc_players.txt
+!docs/missing_tm_players.txt
 
 # Virtual environments
 venv/

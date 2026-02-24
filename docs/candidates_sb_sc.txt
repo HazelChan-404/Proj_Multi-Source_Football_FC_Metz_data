@@ -1,0 +1,28 @@
+# SB <-> SC 候选对（相似度 0.60–0.65）
+# Paires SB–SC (similarité 0.60–0.65)
+# 人工核验结果：均无可匹配对 / Revue manuelle : aucune paire valide
+------------------------------------------------------------
+  0.61 | SB:85592 'Martín Satriano' <-> SC:9248 'Romain Salin'
+  0.63 | SB:85592 'Martín Satriano' <-> SC:11243 'Martin Terrier'
+  0.61 | SB:219601 'Yassine Belkdim' <-> SC:13496 'Yassin Fékir'
+  0.64 | SB:458704 'Paolo Limon' <-> SC:47441 'Paolo Sciortino'
+  0.61 | SB:449200 'Fallou Fall' <-> SC:11211 'Fallou Diagne'
+  0.61 | SB:446590 'Thomas Rousseau' <-> SC:11273 'Tomáš Koubek'
+  0.61 | SB:446590 'Thomas Rousseau' <-> SC:39574 'Thomas Nemouthe'
+  0.61 | SB:454184 'Adams Diabaté' <-> SC:11221 'Adama Diakhaby'
+  0.61 | SB:446800 'Yoann Becker' <-> SC:10952 'Yann Bodiger'
+  0.64 | SB:446800 'Yoann Becker' <-> SC:11021 'Yohann Pelé'
+  0.65 | SB:475542 'Alexander Legendre' <-> SC:561 'Alexandre Letellier'
+  0.61 | SB:475542 'Alexander Legendre' <-> SC:12787 'Alexander Nübel'
+  0.61 | SB:475542 'Alexander Legendre' <-> SC:527 'Alexander Djiku'
+  0.61 | SB:312412 'Hamza Igmane' <-> SC:11760 'Hamza Mendyl'
+  0.61 | SB:417201 'Abdulay Juma Bah' <-> SC:12240 'Abdoulaye Dabo'
+  0.64 | SB:30519 'Mohamed Salisu' <-> SC:18383 'Mohamed Bayo'
+  0.63 | SB:30519 'Mohamed Salisu' <-> SC:12226 'Mohamed Simakan'
+  0.61 | SB:425426 'Yannis Lawson' <-> SC:24787 'Yvann Maçon'
+  0.61 | SB:131027 'Mohamed Kaba' <-> SC:808595 'Mohamed Bechikh'
+  0.61 | SB:131027 'Mohamed Kaba' <-> SC:9441 'Mohamed Saïd Benrahma'
+  0.61 | SB:131027 'Mohamed Kaba' <-> SC:90416 'Mohamed Abdelmonem'
+  0.61 | SB:192524 'Lamine Sy' <-> SC:13353 'Lamine Fomba'
+  0.61 | SB:192524 'Lamine Sy' <-> SC:58670 'Lamine Diack'
+  0.61 | SB:192524 'Lamine Sy' <-> SC:113718 'Amine Salama'

@@ -1,0 +1,6 @@
+# TM <-> SB 候选对（相似度 0.65–0.70）
+# Paires TM–SB (similarité 0.65–0.70)
+# 人工核验结果：两对均已写入 player_manual_mapping 并应用 / Revue : les 2 paires appliquées
+------------------------------------------------------------
+  0.69 | TM:631927 'Saud Abdulhamid' <-> SB:51710 'Saud Abdullah Abdul Hamid'
+  0.67 | TM:743523 'Nathan Buayi-Kiala' <-> SB:449186 'Nathan Mbala'

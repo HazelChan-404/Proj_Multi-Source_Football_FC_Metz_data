@@ -74,13 +74,13 @@ def find_ligue1_current_season(comps_df=None):
     ]
 
     if ligue1.empty:
-        print("⚠️  Ligue 1 not found. Available competitions:")
+        print(" Ligue 1 not found. Available competitions:")
         print(comps_df[['competition_name', 'country_name', 'season_name']].to_string())
-        # Return the first available competition as fallback
+        # Renvoyer la première compétition disponible en secours
         row = comps_df.iloc[0]
         return int(row['competition_id']), int(row['season_id']), row['season_name']
 
-    # Get the most recent season (highest season_id or by name)
+    # Prendre la saison la plus récente (season_id le plus élevé)
     ligue1_sorted = ligue1.sort_values('season_id', ascending=False)
     latest = ligue1_sorted.iloc[0]
 
@@ -88,7 +88,7 @@ def find_ligue1_current_season(comps_df=None):
     season_id = int(latest['season_id'])
     season_name = latest['season_name']
 
-    print(f"   🎯 Found: {latest['competition_name']} - {season_name}")
+    print(f"    Found: {latest['competition_name']} - {season_name}")
     print(f"      competition_id={comp_id}, season_id={season_id}")
 
     return comp_id, season_id, season_name
@@ -107,7 +107,7 @@ def ingest_competitions(conn, comps_df=None):
     cursor = conn.cursor()
 
     for _, row in comps_df.iterrows():
-        # Insert competition
+        # Insérer la compétition
         cursor.execute(f"""
             INSERT INTO {table("competitions")} 
             (competition_id, competition_name, country_name, competition_gender,
@@ -123,7 +123,7 @@ def ingest_competitions(conn, comps_df=None):
             str(row.get('competition_international', False)),
         ))
 
-        # Insert season
+        # Insérer la saison
         cursor.execute(f"""
             INSERT INTO {table("seasons")} (season_id, season_name, competition_id)
             VALUES (%s, %s, %s)
@@ -135,7 +135,7 @@ def ingest_competitions(conn, comps_df=None):
         ))
 
     conn.commit()
-    print(f"✅ Stored {len(comps_df)} competition-season entries")
+    print(f"Stored {len(comps_df)} competition-season entries")
     return comps_df
 
 
@@ -164,7 +164,7 @@ def ingest_matches(conn, competition_id, season_id):
     for _, row in matches_df.iterrows():
         sb_match_id = int(row['match_id'])
 
-        # API returns home_team/away_team as object {id, name} or flat string; statsbombpy may flatten
+        # L'API renvoie home_team/away_team en objet {id, name} ou chaîne plate ; statsbombpy peut aplatir
         home_team_name = _extract_name_or_id(row.get('home_team')) or str(row.get('home_team', '') or '')
         home_team_sb_id = _extract_id(row.get('home_team'))
         if home_team_sb_id is None and 'home_team_id' in row and pd.notna(row.get('home_team_id')):
@@ -232,7 +232,7 @@ def ingest_matches(conn, competition_id, season_id):
         stadium_name = _extract_name_or_id(row.get('stadium'))
         referee_name = _extract_name_or_id(row.get('referee')) or _extract_name_or_id(row.get('referee_name'))
 
-        # Insert match
+        # Insérer le match
         cursor.execute(f"""
             INSERT INTO {table("matches")} 
             (statsbomb_match_id, competition_id, season_id, match_date, kick_off,
@@ -257,7 +257,7 @@ def ingest_matches(conn, competition_id, season_id):
         ))
 
     conn.commit()
-    print(f"✅ Stored {len(matches_df)} matches")
+    print(f" Stored {len(matches_df)} matches")
     return matches_df
 
 
@@ -272,7 +272,7 @@ def get_events(match_id):
         events = sb.events(match_id=match_id, creds=STATSBOMB_CREDS)
         return events if events is not None and not (hasattr(events, 'empty') and events.empty) else pd.DataFrame()
     except (ValueError, Exception) as e:
-        # statsbombpy raises ValueError("No objects to concatenate") when match has no events
+        # statsbombpy lève ValueError("No objects to concatenate") si le match n'a pas d'events
         if "No objects to concatenate" in str(e) or "No objects" in str(e):
             return pd.DataFrame()
         raise
@@ -336,7 +336,7 @@ def ingest_events(conn, matches_df, max_matches=None):
         match_ids = match_ids[:max_matches]
 
     if INCREMENTAL_UPDATE:
-        # Skip matches we already have events for
+        # Ignorer les matchs pour lesquels on a déjà des events
         to_fetch = []
         for sb_mid in match_ids:
             cursor.execute(
@@ -361,7 +361,7 @@ def ingest_events(conn, matches_df, max_matches=None):
             if events_df.empty:
                 continue
 
-            # Get internal match_id
+            # Obtenir le match_id interne
             cursor.execute(
                 f"SELECT match_id FROM {table('matches')} WHERE statsbomb_match_id = %s",
                 (int(sb_match_id),)
@@ -372,7 +372,7 @@ def ingest_events(conn, matches_df, max_matches=None):
             internal_match_id = result[0]
 
             for _, evt in events_df.iterrows():
-                # Get player internal id (or insert new player)
+                # Obtenir l'id joueur interne (ou insérer le joueur)
                 player_internal_id = None
                 sb_player_id = None
                 player_name = None
@@ -381,7 +381,7 @@ def ingest_events(conn, matches_df, max_matches=None):
                     sb_player_id = int(evt['player_id'])
                     player_name = str(evt['player'])
 
-                    # Try to find existing player
+                    # Chercher un joueur existant
                     cursor.execute(
                         f"SELECT player_id FROM {table('players')} WHERE statsbomb_player_id = %s",
                         (sb_player_id,)
@@ -390,7 +390,7 @@ def ingest_events(conn, matches_df, max_matches=None):
                     if player_result:
                         player_internal_id = player_result[0]
                     else:
-                        # Insert new player
+                        # Insérer le nouveau joueur
                         cursor.execute(f"""
                             INSERT INTO {table("players")} 
                             (statsbomb_player_id, statsbomb_player_name, player_name)
@@ -405,14 +405,14 @@ def ingest_events(conn, matches_df, max_matches=None):
                         if player_result:
                             player_internal_id = player_result[0]
 
-                # Extract location (handle list/tuple/np.ndarray - avoid pd.notna on arrays)
+                # Extraire la position (gérer list/tuple/np.ndarray - éviter pd.notna sur les arrays)
                 location_x, location_y = None, None
                 loc = evt.get('location')
                 if _has_val(loc):
                     if isinstance(loc, (list, tuple, np.ndarray)) and len(loc) >= 2:
                         location_x, location_y = float(loc[0]), float(loc[1])
 
-                # Extract pass details
+                # Extraire les détails de passe
                 pass_end_x, pass_end_y = None, None
                 pel = evt.get('pass_end_location')
                 if _has_val(pel):
@@ -423,21 +423,21 @@ def ingest_events(conn, matches_df, max_matches=None):
                 if _has_val(evt.get('pass_recipient_id')):
                     pass_recipient_id = int(evt['pass_recipient_id'])
 
-                # Extract shot details
+                # Extraire les détails de tir
                 shot_end_x, shot_end_y = None, None
                 sel = evt.get('shot_end_location')
                 if _has_val(sel):
                     if isinstance(sel, (list, tuple, np.ndarray)) and len(sel) >= 2:
                         shot_end_x, shot_end_y = float(sel[0]), float(sel[1])
 
-                # Extract carry details
+                # Extraire les détails de conduite
                 carry_end_x, carry_end_y = None, None
                 cel = evt.get('carry_end_location')
                 if _has_val(cel):
                     if isinstance(cel, (list, tuple, np.ndarray)) and len(cel) >= 2:
                         carry_end_x, carry_end_y = float(cel[0]), float(cel[1])
 
-                # Get team_id
+                # Obtenir team_id
                 team_internal_id = None
                 if _has_val(evt.get('team')):
                     cursor.execute(
@@ -448,7 +448,7 @@ def ingest_events(conn, matches_df, max_matches=None):
                     if team_result:
                         team_internal_id = team_result[0]
 
-                # Get possession team id
+                # Obtenir l'id équipe en possession
                 poss_team_id = None
                 if _has_val(evt.get('possession_team')):
                     cursor.execute(
@@ -459,7 +459,7 @@ def ingest_events(conn, matches_df, max_matches=None):
                     if poss_result:
                         poss_team_id = poss_result[0]
 
-                # Safe get for optional fields (avoids array/Series in boolean context)
+                # Accès sécurisé aux champs optionnels (évite array/Series en contexte booléen)
                 def safe_get(col, default=None):
                     val = evt.get(col)
                     if val is None:
@@ -472,7 +472,7 @@ def ingest_events(conn, matches_df, max_matches=None):
                         return val.item() if val.size == 1 else default
                     return val
 
-                # Event id must be valid (StatsBomb UUID string)
+                # L'event_id doit être valide (chaîne UUID StatsBomb)
                 event_id_val = evt.get('id')
                 if not _has_val(event_id_val):
                     continue
@@ -544,7 +544,7 @@ def ingest_events(conn, matches_df, max_matches=None):
                         _to_pg_val(safe_get('obv_against_net')),
                     ))
                 except Exception as e:
-                    # Log first few failures to help debug; skip individual events that fail
+                    # Logger quelques échecs pour debug ; ignorer les events individuels en erreur
                     if insert_errors_logged < 3:
                         insert_errors_logged += 1
                         print(f"   ⚠️  Event insert error #{insert_errors_logged} (event_id={event_id_str[:24]}...): {e}")
@@ -615,11 +615,11 @@ def ingest_match_lineups(conn, matches_df, max_matches=None):
                 to_fetch.append(sb_mid)
         match_ids = to_fetch
         if not match_ids:
-            print("📡 All matches already have lineups (INCREMENTAL_UPDATE), skipping.")
+            print(" All matches already have lineups (INCREMENTAL_UPDATE), skipping.")
             return 0
-        print(f"📡 Fetching lineups for {len(match_ids)} matches...")
+        print(f" Fetching lineups for {len(match_ids)} matches...")
     else:
-        print(f"📡 Fetching lineups for {len(match_ids)} matches...")
+        print(f" Fetching lineups for {len(match_ids)} matches...")
 
     total_lineups = 0
     for i, sb_match_id in enumerate(match_ids):
@@ -648,7 +648,7 @@ def ingest_match_lineups(conn, matches_df, max_matches=None):
                 team_row = cursor.fetchone()
                 internal_team_id = team_row[0] if team_row else None
 
-                # Backfill statsbomb_team_id si manquant (lineups a l'ID précis)
+                # Compléter statsbomb_team_id si manquant (lineups à l'ID précis)
                 if internal_team_id:
                     cursor.execute(
                         f"UPDATE {table('teams')} SET statsbomb_team_id = %s WHERE team_id = %s AND statsbomb_team_id IS NULL",
@@ -729,11 +729,11 @@ def ingest_match_lineups(conn, matches_df, max_matches=None):
                 print(f"   Lineups progress: {i+1}/{len(match_ids)} matches ({total_lineups} entries)")
 
         except Exception as e:
-            print(f"   ⚠️  Error fetching lineups for match {sb_match_id}: {e}")
+            print(f"     Error fetching lineups for match {sb_match_id}: {e}")
             continue
 
     conn.commit()
-    print(f"✅ Stored {total_lineups} lineup entries from {len(match_ids)} matches")
+    print(f" Stored {total_lineups} lineup entries from {len(match_ids)} matches")
     return total_lineups
 
 
@@ -766,7 +766,7 @@ def ingest_player_season_stats(conn, competition_id, season_id):
         sb_player_id = int(row.get('player_id', 0))
         player_name = str(row.get('player_name', ''))
 
-        # Ensure player exists
+        # Vérifier que le joueur existe
         cursor.execute(
             f"SELECT player_id FROM {table('players')} WHERE statsbomb_player_id = %s",
             (sb_player_id,)
@@ -791,7 +791,7 @@ def ingest_player_season_stats(conn, competition_id, season_id):
         if not player_internal_id:
             continue
 
-        # Get team internal id
+        # Obtenir l'id équipe interne
         team_internal_id = None
         if pd.notna(row.get('team_name')):
             cursor.execute(
@@ -811,7 +811,7 @@ def ingest_player_season_stats(conn, competition_id, season_id):
                 return val.item() if val.size == 1 else default
             return val
 
-        # Store raw stats as JSON (handle numpy for json.dumps)
+        # Stocker les stats brutes en JSON (gérer numpy pour json.dumps)
         def _to_json_val(v):
             if v is None or (isinstance(v, float) and pd.isna(v)):
                 return None
@@ -937,13 +937,13 @@ def update_player_info_from_mapping(conn, competition_id, season_id):
         count = 0
 
         for entry in mapping_data:
-            # API Player Mapping v1: offline_player_id is StatsBomb player ID
+            # API Player Mapping v1 : offline_player_id = StatsBomb player ID
             sb_player_id = entry.get('offline_player_id')
             if sb_player_id is None:
                 continue
 
-            # API fields: player_birth_date, player_height, player_weight,
-            # player_preferred_foot (doc typo: perferred), country_of_birth_name
+            # Champs API : player_birth_date, player_height, player_weight,
+            # player_preferred_foot (typo doc : perferred), country_of_birth_name
             cursor.execute(f"""
                 UPDATE {table("players")} SET
                     date_of_birth = COALESCE(%s, date_of_birth),
@@ -994,7 +994,7 @@ def run_statsbomb_ingestion(conn=None, max_event_matches=None):
         conn = get_connection()
 
     print("\n" + "="*60)
-    print("🏟️  STATSBOMB DATA INGESTION")
+    print("  STATSBOMB DATA INGESTION")
     print("="*60)
 
     # 1. Get competitions
@@ -1031,7 +1031,7 @@ def run_statsbomb_ingestion(conn=None, max_event_matches=None):
     # 6. Update player info from mapping
     update_player_info_from_mapping(conn, comp_id, season_id)
 
-    print("\n✅ StatsBomb ingestion complete!")
+    print("\n StatsBomb ingestion complete!")
     return comp_id, season_id, matches_df
 
 

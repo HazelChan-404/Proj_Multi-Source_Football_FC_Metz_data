@@ -35,7 +35,7 @@ def make_request(url, max_retries=3):
     """Make an HTTP request with retry logic and rate limiting."""
     for attempt in range(max_retries):
         try:
-            time.sleep(2 + attempt)  # Respectful rate limiting
+            time.sleep(2 + attempt)  # Limitation du débit (respectueuse)
             response = requests.get(url, headers=REQUEST_HEADERS, timeout=15)
             if response.status_code == 200:
                 return response
@@ -73,10 +73,10 @@ def get_ligue1_teams():
     soup = BeautifulSoup(response.text, 'html.parser')
     teams = []
 
-    # Find team links in the main table
+    # Trouver les liens équipes dans la table principale
     team_links = soup.select('td.hauptlink.no-border-links a[href*="/startseite/verein/"]')
     
-    # Also try alternative selectors
+    # Essayer aussi des sélecteurs alternatifs
     if not team_links:
         team_links = soup.select('table.items a[href*="/verein/"]')
     
@@ -96,7 +96,7 @@ def get_ligue1_teams():
         seen_urls.add(href)
         full_url = TRANSFERMARKT_BASE_URL + href if not href.startswith('http') else href
 
-        # Extract team ID from URL
+        # Extraire l'ID équipe de l'URL
         tm_id_match = re.search(r'/verein/(\d+)', href)
         tm_id = tm_id_match.group(1) if tm_id_match else None
 
@@ -120,12 +120,12 @@ def get_team_players(team_url, team_name):
     Scrape a team page to get all players with their basic info.
     Returns list of player dicts.
     """
-    # Convert URL to detail/kader (squad) page
+    # Convertir l'URL en page détail/kader (effectif)
     kader_url = team_url.replace('/startseite/', '/kader/')
     if '/kader/' not in kader_url:
         kader_url = team_url
 
-    # Add plus=1 to show detailed view
+    # Ajouter plus=1 pour afficher la vue détaillée
     if '?' in kader_url:
         kader_url += '&plus=1'
     else:
@@ -139,7 +139,7 @@ def get_team_players(team_url, team_name):
     soup = BeautifulSoup(response.text, 'html.parser')
     players = []
 
-    # Find player rows in the squad table
+    # Trouver les lignes joueurs dans la table effectif
     player_rows = soup.select('table.items tbody tr')
 
     for row in player_rows:
@@ -157,7 +157,7 @@ def parse_player_row(row, team_name):
     """Parse a single player row from the Transfermarkt squad table."""
     player = {'current_club': team_name}
 
-    # Player name and link
+    # Nom du joueur et lien
     name_link = row.select_one('td.hauptlink a[href*="/profil/spieler/"]')
     if not name_link:
         name_link = row.select_one('a.spielprofil_tooltip')
@@ -168,11 +168,11 @@ def parse_player_row(row, team_name):
     href = name_link.get('href', '')
     player['url'] = TRANSFERMARKT_BASE_URL + href if not href.startswith('http') else href
 
-    # Extract TM player ID
+    # Extraire l'ID joueur Transfermarkt
     tm_id_match = re.search(r'/spieler/(\d+)', href)
     player['tm_id'] = tm_id_match.group(1) if tm_id_match else None
 
-    # Jersey number (skip '-' or non-numeric)
+    # Numéro de maillot (ignorer '-' ou non-numérique)
     rn_cell = row.select_one("div.rn_nummer")
     if rn_cell:
         raw = rn_cell.get_text(strip=True)
@@ -186,7 +186,7 @@ def parse_player_row(row, team_name):
     pos_cells = row.select('td')
     for cell in pos_cells:
         text = cell.get_text(strip=True)
-        # Common positions in French Transfermarkt
+        # Positions courantes sur Transfermarkt français
         if any(pos in text.lower() for pos in [
             'gardien', 'défenseur', 'milieu', 'attaquant',
             'arrière', 'ailier', 'buteur', 'avant-centre',
@@ -198,20 +198,20 @@ def parse_player_row(row, team_name):
             player['position'] = text
             break
 
-    # Date of birth
+    # Date de naissance
     for cell in pos_cells:
         text = cell.get_text(strip=True)
-        # Match date patterns like "1 janv. 2000 (25)" or "01/01/2000"
+        # Formats de date ex. "1 janv. 2000 (25)" ou "01/01/2000"
         dob_match = re.search(r'(\d{1,2}\s+\w+\.?\s+\d{4})', text)
         if dob_match:
             player['date_of_birth'] = dob_match.group(1)
-            # Extract age
+            # Extraire l'âge
             age_match = re.search(r'\((\d+)\)', text)
             if age_match:
                 player['age'] = age_match.group(1)
             break
 
-    # Nationality - from flag images
+    # Nationalité - depuis les images de drapeaux
     flag_imgs = row.select('img.flaggenrahmen')
     if flag_imgs:
         nationalities = []
@@ -222,7 +222,7 @@ def parse_player_row(row, team_name):
         if nationalities:
             player['nationality'] = ', '.join(nationalities)
 
-    # Market value
+    # Valeur marchande
     mv_cell = row.select_one('td.rechts.hauptlink a')
     if not mv_cell:
         mv_cell = row.select_one('td.rechts.hauptlink')
@@ -230,7 +230,7 @@ def parse_player_row(row, team_name):
         player['market_value'] = mv_cell.get_text(strip=True)
         player['market_value_numeric'] = parse_market_value(player['market_value'])
 
-    # Height
+    # Taille
     for cell in pos_cells:
         text = cell.get_text(strip=True)
         height_match = re.search(r'(\d+,\d+)\s*m', text)
@@ -244,7 +244,7 @@ def parse_player_row(row, team_name):
                 player['height_cm'] = float(h)
             break
 
-    # Contract expiry
+    # Fin de contrat
     for cell in pos_cells:
         text = cell.get_text(strip=True)
         contract_match = re.search(r'(\d{1,2}/\d{1,2}/\d{4})', text)
@@ -266,7 +266,7 @@ def parse_market_value(value_str):
 
     value_str = value_str.strip().lower()
 
-    # Remove currency symbols and whitespace
+    # Supprimer les symboles de devise et espaces
     value_str = value_str.replace('€', '').replace('$', '').replace('£', '').strip()
 
     try:
@@ -309,7 +309,7 @@ def get_player_detail(player_url):
     soup = BeautifulSoup(response.text, "html.parser")
     details = {}
 
-    # Try multiple info box structures (TM updates layout periodically)
+    # Essayer plusieurs structures de boîte info (TM met à jour la mise en page)
     info_sections = [
         soup.select_one("div.info-table"),
         soup.select_one("table.auflistung"),
@@ -369,7 +369,7 @@ def get_player_detail(player_url):
         if details:
             break
 
-    # Market value (multiple possible locations)
+    # Valeur marchande (plusieurs emplacements possibles)
     mv_el = (
         soup.select_one("div.tm-player-market-value-development__current-value")
         or soup.select_one("a.tm-player-market-value-development__current-value")
@@ -401,8 +401,8 @@ def store_transfermarkt_data(conn, players_data):
         if not name:
             continue
 
-        # Try to find existing player by name (fuzzy match)
-        # Split last name for matching
+        # Tenter de trouver un joueur existant par nom (match flou)
+        # Séparer le nom pour le matching
         name_parts = name.split()
         last_name = name_parts[-1] if name_parts else name
 
@@ -419,7 +419,7 @@ def store_transfermarkt_data(conn, players_data):
         ))
         results = cursor.fetchall()
 
-        # If multiple matches with last name, try more precise match
+        # Si plusieurs matchs avec le nom, tenter un match plus précis
         if len(results) > 1:
             cursor.execute(f"""
                 SELECT player_id FROM {table('players')} 
@@ -432,7 +432,7 @@ def store_transfermarkt_data(conn, players_data):
 
         if results:
             player_id = results[0][0]
-            # Update existing player with Transfermarkt data
+            # Mettre à jour le joueur existant avec les données Transfermarkt
             cursor.execute(f"""
                 UPDATE {table('players')} SET
                     transfermarkt_player_id = COALESCE(%s, transfermarkt_player_id),
@@ -468,7 +468,7 @@ def store_transfermarkt_data(conn, players_data):
             ))
             linked += 1
 
-            # Update mapping table
+            # Mettre à jour la table de mapping
             cursor.execute(f"""
                 INSERT INTO {table('player_id_mapping')} 
                 (player_id, transfermarkt_player_id, mapping_method)
@@ -477,7 +477,7 @@ def store_transfermarkt_data(conn, players_data):
             """, (player_id, tm_id))
 
         else:
-            # Insert as new player
+            # Insérer comme nouveau joueur
             cursor.execute(f"""
                 INSERT INTO {table('players')} 
                 (player_name, transfermarkt_player_id, transfermarkt_url,
@@ -648,7 +648,7 @@ def run_transfermarkt_scraping(conn=None, detailed=False, fill_nulls_only=False)
 
         all_players.extend(players)
 
-    print(f"\n📊 Total players scraped: {len(all_players)}")
+    print(f"\n Total players scraped: {len(all_players)}")
 
     # 4. Store in database
     if all_players:

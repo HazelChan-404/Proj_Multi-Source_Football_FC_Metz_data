@@ -103,7 +103,7 @@ def build_player_fused(conn=None):
         count += 1
 
     conn.commit()
-    print(f"✅ Built player_fused: {count} players")
+    print(f"Built player_fused: {count} players")
 
     # Stats
     cursor.execute(

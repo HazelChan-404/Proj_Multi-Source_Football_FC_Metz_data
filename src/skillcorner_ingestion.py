@@ -64,13 +64,13 @@ def find_ligue1_edition(client):
     """
     print("📡 Searching for Ligue 1 competition edition...")
 
-    # Get all seasons and find the most recent one
+    # Récupérer toutes les saisons et trouver la plus récente
     seasons = get_seasons(client)
 
-    # Sort by ID (higher = more recent)
+    # Trier par ID (plus élevé = plus récent)
     seasons_sorted = sorted(seasons, key=lambda s: s.get('id', 0), reverse=True)
 
-    for season in seasons_sorted[:3]:  # Check last 3 seasons
+    for season in seasons_sorted[:3]:  # Vérifier les 3 dernières saisons
         season_id = season.get('id')
         season_name = season.get('name', '')
         print(f"   Checking season: {season_name} (id={season_id})")
@@ -91,12 +91,12 @@ def find_ligue1_edition(client):
                 comp_id = comp.get('id')
                 print(f"   Found competition: {comp_name} (id={comp_id})")
 
-                # Get competition editions
+                # Récupérer les éditions de compétition
                 try:
                     editions = client.get_competition_editions(
                         params={'season': season_id}
                     )
-                    # Also try competition-specific editions
+                    # Essayer aussi les éditions spécifiques à la compétition
                     if not editions:
                         editions = client.get_competition_competition_editions(
                             competition_id=str(comp_id)
@@ -114,13 +114,13 @@ def find_ligue1_edition(client):
                         print(f"   Found edition: {ed_name} (id={ed_id})")
                         return ed_id, season
 
-                # If no edition found from filtering, try listing all editions for the competition
+                # Si aucune édition trouvée après filtre, lister toutes les éditions de la compétition
                 try:
                     all_editions = client.get_competition_competition_editions(
                         competition_id=str(comp_id)
                     )
                     if all_editions:
-                        # Get the most recent edition
+                        # Prendre l'édition la plus récente
                         latest_edition = sorted(
                             all_editions,
                             key=lambda e: e.get('id', 0),
@@ -134,7 +134,7 @@ def find_ligue1_edition(client):
 
     print("    Could not find Ligue 1 edition. Trying with all competition editions...")
 
-    # Fallback: list all competition editions
+    # Secours : lister toutes les éditions de compétition
     try:
         all_editions = client.get_competition_editions()
         for edition in all_editions:
@@ -177,7 +177,7 @@ def _team_name_matches(db_name, sc_name):
 
 def _find_db_team_by_name(cursor, team_name, sc_team_name):
     """Find DB team matching sc_team_name or team_name. Returns (team_id,) or None."""
-    # Try exact match first
+    # Essayer d'abord le match exact
     cursor.execute(
         f"SELECT team_id FROM {table('teams')} WHERE LOWER(team_name) = LOWER(%s)",
         (team_name or sc_team_name or "",)
@@ -185,7 +185,7 @@ def _find_db_team_by_name(cursor, team_name, sc_team_name):
     r = cursor.fetchone()
     if r:
         return r
-    # Try matching against all DB teams
+    # Essayer de matcher contre toutes les équipes DB
     cursor.execute(
         f"SELECT team_id, team_name FROM {table('teams')}"
     )
@@ -298,7 +298,7 @@ def ingest_matches(conn, client, competition_edition_id):
         sc_home_id = home_team.get('id')
         sc_away_id = away_team.get('id')
 
-        # Skip if this SkillCorner match_id is already linked
+        # Ignorer si ce match_id SkillCorner est déjà lié
         cursor.execute(
             f"SELECT 1 FROM {table('matches')} WHERE skillcorner_match_id = %s LIMIT 1",
             (sc_match_id,)
@@ -335,7 +335,7 @@ def ingest_matches(conn, client, competition_edition_id):
             existing = cursor.fetchone()
 
         if existing:
-            # Only update if target match does not yet have a SkillCorner link
+            # Mettre à jour uniquement si le match cible n'a pas encore de lien SkillCorner
             cursor.execute(
                 f"""UPDATE {table('matches')} SET skillcorner_match_id = %s
                     WHERE match_id = %s AND skillcorner_match_id IS NULL""",
@@ -424,16 +424,16 @@ def ingest_players(conn, client, competition_edition_id):
     """)
     sb_without_sc = cursor.fetchall()
 
-    # Get all teams for this competition / 获取该赛季所有球队
+    # Récupérer toutes les équipes de cette compétition / 获取该赛季所有球队
     cursor.execute(f"SELECT team_name, skillcorner_team_id FROM {table('teams')} WHERE skillcorner_team_id IS NOT NULL")
     sc_teams = cursor.fetchall()
 
     count = 0
     for team_name, sc_team_id in sc_teams:
         try:
-            # Search for players by team
+            # Rechercher les joueurs par équipe
             players = client.get_players(params={'team': sc_team_id})
-            time.sleep(0.3)  # Rate limiting
+            time.sleep(0.3)  # Limitation du débit
         except Exception as e:
             print(f"  Error fetching players for team {team_name}: {e}")
             continue
@@ -453,7 +453,7 @@ def ingest_players(conn, client, competition_edition_id):
             if not player_name and not full_name:
                 continue
 
-            # Skip if this SkillCorner player_id is already linked (prevents unique violation)
+            # Ignorer si ce player_id SkillCorner est déjà lié (évite violation UNIQUE)
             cursor.execute(
                 f"SELECT 1 FROM {table('players')} WHERE skillcorner_player_id = %s LIMIT 1",
                 (sc_player_id,)
@@ -461,7 +461,7 @@ def ingest_players(conn, client, competition_edition_id):
             if cursor.fetchone():
                 continue
 
-            # Try multiple name variants for matching
+            # Essayer plusieurs variantes de noms pour le matching
             search_names = [
                 full_name or player_name,
                 short_name,
@@ -525,7 +525,7 @@ def ingest_players(conn, client, competition_edition_id):
                 # Retirer du cache pour éviter double match / 从缓存移除，避免重复匹配
                 sb_without_sc = [p for p in sb_without_sc if p[0] != existing[0]]
             else:
-                # Insert new player
+                # Insérer le nouveau joueur
                 cursor.execute(
                     f"""
                     INSERT INTO {table('players')} 
@@ -556,7 +556,7 @@ def ingest_physical_data(conn, client, competition_edition_id):
 
     cursor = conn.cursor()
 
-    # Get all teams with SkillCorner IDs
+    # Récupérer toutes les équipes avec IDs SkillCorner
     cursor.execute(
         f"SELECT team_id, team_name, skillcorner_team_id FROM {table('teams')} "
         "WHERE skillcorner_team_id IS NOT NULL"
@@ -572,7 +572,7 @@ def ingest_physical_data(conn, client, competition_edition_id):
             physical_data = client.get_physical(
                 params={'team': sc_team_id}
             )
-            time.sleep(0.5)  # Rate limiting
+            time.sleep(0.5)  # Limitation du débit
         except Exception as e:
             print(f"  Error fetching physical data for {team_name}: {e}")
             continue
@@ -587,7 +587,7 @@ def ingest_physical_data(conn, client, competition_edition_id):
             if not sc_match_id or not sc_player_id:
                 continue
 
-            # Find internal match_id
+            # Trouver le match_id interne
             internal_match_id = None
             cursor.execute(
                 f"SELECT match_id FROM {table('matches')} WHERE skillcorner_match_id = %s",
@@ -597,7 +597,7 @@ def ingest_physical_data(conn, client, competition_edition_id):
             if match_result:
                 internal_match_id = match_result[0]
 
-            # Find internal player_id
+            # Trouver le player_id interne
             internal_player_id = None
             cursor.execute(
                 f"SELECT player_id FROM {table('players')} WHERE skillcorner_player_id = %s",
@@ -607,7 +607,7 @@ def ingest_physical_data(conn, client, competition_edition_id):
             if player_result:
                 internal_player_id = player_result[0]
             else:
-                # Try match by name from physical record (backfill SC link)
+                # Tenter le match par nom depuis l'enregistrement physical (compléter le lien SC)
                 sc_player_name = (
                     record.get("player_name")
                     or record.get("player_short_name")
@@ -634,7 +634,7 @@ def ingest_physical_data(conn, client, competition_edition_id):
                         )
                         match = cursor.fetchone()
                         if match:
-                            # Also fill date_of_birth, primary_position if null
+                            # Remplir aussi date_of_birth, primary_position si null
                             dob = record.get("player_birthdate")
                             pos = record.get("position") or record.get("position_group")
                             cursor.execute(
@@ -652,7 +652,7 @@ def ingest_physical_data(conn, client, competition_edition_id):
                             internal_player_id = match[0]
                             break
 
-            # Extract physical metrics (SkillCorner API field names - multiple variants)
+            # Extraire les métriques physiques (noms de champs API SkillCorner - variantes multiples)
             def get_metric(record, *keys):
                 for key in keys:
                     val = record.get(key)
@@ -662,7 +662,7 @@ def ingest_physical_data(conn, client, competition_edition_id):
 
             raw_json = json.dumps(record, default=str)
 
-            # SkillCorner 2024+ uses *_full_all suffixes (e.g. total_distance_full_all)
+            # SkillCorner 2024+ utilise les suffixes *_full_all (ex. total_distance_full_all)
             minutes = get_metric(
                 record, "minutes_full_all", "minutes_played", "minutes"
             )
@@ -815,12 +815,12 @@ def run_skillcorner_ingestion(conn=None):
     if not edition_id:
         print("Could not find Ligue 1 competition edition!")
         print("   Attempting to use all available data...")
-        # Try to get any available data
+        # Tenter d'obtenir toutes les données disponibles
         try:
             matches = client.get_matches()
             if matches:
                 print(f"   Found {len(matches)} matches in total")
-                # Look for French matches
+                # Chercher des matchs français
                 for m in matches[:5]:
                     print(f"   Sample match: {m}")
         except Exception as e:

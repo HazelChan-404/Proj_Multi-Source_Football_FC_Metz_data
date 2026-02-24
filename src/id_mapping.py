@@ -189,7 +189,7 @@ def build_player_id_mapping(conn=None):
             count += 1
 
     conn.commit()
-    print(f"✅ Created {count} player ID mappings")
+    print(f" Created {count} player ID mappings")
 
     # Print mapping statistics
     cursor.execute(f"SELECT COUNT(*) FROM {table('players')} WHERE statsbomb_player_id IS NOT NULL")
@@ -218,7 +218,7 @@ def build_player_id_mapping(conn=None):
     """)
     all_three = cursor.fetchone()[0]
 
-    print(f"\n📊 Player ID Mapping Statistics:")
+    print(f"\n Player ID Mapping Statistics:")
     print(f"   Players with StatsBomb ID:     {sb_count}")
     print(f"   Players with SkillCorner ID:   {sc_count}")
     print(f"   Players with Transfermarkt ID: {tm_count}")
@@ -226,7 +226,52 @@ def build_player_id_mapping(conn=None):
     print(f"   Linked SB + TM:                {sb_tm}")
     print(f"   Linked all three sources:       {all_three}")
 
+    # Exporter les listes des joueurs manquants SC/TM (mise à jour à chaque run)
+    _export_missing_players(cursor)
+
     return count
+
+
+def _export_missing_players(cursor):
+    """
+    Écrit docs/missing_sc_players.txt et docs/missing_tm_players.txt.
+    Mise à jour à chaque exécution du pipeline.
+    每次运行都会更新缺 SC/TM 的球员名单。
+    """
+    docs_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs")
+    os.makedirs(docs_dir, exist_ok=True)
+
+    # 缺 SkillCorner ID 的球员（有 SB 无 SC）
+    cursor.execute(f"""
+        SELECT player_name FROM {table('players')}
+        WHERE statsbomb_player_id IS NOT NULL AND skillcorner_player_id IS NULL
+        ORDER BY player_name
+    """)
+    missing_sc = [row[0] for row in cursor.fetchall() if row[0]]
+    sc_path = os.path.join(docs_dir, "missing_sc_players.txt")
+    with open(sc_path, "w", encoding="utf-8") as f:
+        f.write(f"缺 SkillCorner ID 的 {len(missing_sc)} 人\n")
+        f.write("=" * 50 + "\n")
+        f.write("\n".join(missing_sc))
+        if missing_sc:
+            f.write("\n")
+
+    # 缺 Transfermarkt ID 的球员（有 SB 无 TM）
+    cursor.execute(f"""
+        SELECT player_name FROM {table('players')}
+        WHERE statsbomb_player_id IS NOT NULL AND transfermarkt_player_id IS NULL
+        ORDER BY player_name
+    """)
+    missing_tm = [row[0] for row in cursor.fetchall() if row[0]]
+    tm_path = os.path.join(docs_dir, "missing_tm_players.txt")
+    with open(tm_path, "w", encoding="utf-8") as f:
+        f.write(f"缺 Transfermarkt ID 的 {len(missing_tm)} 人\n")
+        f.write("=" * 50 + "\n")
+        f.write("\n".join(missing_tm))
+        if missing_tm:
+            f.write("\n")
+
+    print(f"   Exported missing lists to docs/")
 
 
 def apply_manual_mappings(conn=None):
@@ -321,7 +366,7 @@ def apply_manual_mappings(conn=None):
 
     conn.commit()
     if applied:
-        print(f"   ✅ Applied {applied} manual mappings")
+        print(f"    Applied {applied} manual mappings")
     return applied
 
 
@@ -367,7 +412,7 @@ def attempt_fuzzy_matching(conn=None, export_candidates=False):
         conn = get_connection()
 
     cursor = conn.cursor()
-    print("\n🔍 Attempting fuzzy name matching for unlinked players...")
+    print("\n Attempting fuzzy name matching for unlinked players...")
 
     # 0. Appliquer les mappings manuels d'abord / 优先应用手动映射
     apply_manual_mappings(conn)
@@ -522,7 +567,7 @@ def attempt_fuzzy_matching(conn=None, export_candidates=False):
                 sb_no_tm = [p for p in sb_no_tm if p[0] != sb_pid]
 
     conn.commit()
-    print(f"✅ Fuzzy matched and merged {merged} SB<->SC, {tm_merged} TM<->SB player records")
+    print(f"Fuzzy matched and merged {merged} SB<->SC, {tm_merged} TM<->SB player records")
 
     # Export candidats pour revue manuelle / 导出待人工核验的候选对
     if export_candidates and (candidates_sb_sc or candidates_tm_sb):
@@ -558,7 +603,7 @@ def print_database_summary(conn=None):
     cursor = conn.cursor()
 
     print("\n" + "="*60)
-    print("📊 DATABASE SUMMARY")
+    print(" DATABASE SUMMARY")
     print("="*60)
 
     # Tables et libellés / 表及标签
