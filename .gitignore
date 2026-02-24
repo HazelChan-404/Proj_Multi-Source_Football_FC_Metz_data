@@ -18,6 +18,9 @@ build/
 *.swo
 .DS_Store
 
+# Documentation (ne pas versionner)
+docs/
+
 # Virtual environments
 venv/
 env/

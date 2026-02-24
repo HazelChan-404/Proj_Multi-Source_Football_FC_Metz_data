@@ -32,6 +32,7 @@ La base PostgreSQL (schéma `fc_metz`) relie **matches**, **équipes**, **joueur
 | `player_season_stats` | StatsBomb | Stats agrégées (goals_90, xG, passes...) |
 | `player_match_physical` | SkillCorner | Distance, sprints, vitesse par match |
 | `player_id_mapping` | Interne | Correspondance des IDs entre sources |
+| `player_manual_mapping` | Optionnel | Correspondances manuelles SB/SC/TM (priorité avant fuzzy) |
 | `player_fused` | Dérivée | Vue agrégée par joueur (events + tracking + contexte) |
 
 ### Focus table `players`
@@ -91,6 +92,7 @@ python main.py --statsbomb      # StatsBomb uniquement
 python main.py --skillcorner    # SkillCorner uniquement
 python main.py --transfermarkt # Transfermarkt uniquement
 python main.py --mapping       # ID mapping uniquement
+python main.py --mapping --export-candidates  # + exporter candidats pour revue manuelle
 
 # Résumé de la base
 python main.py --summary
@@ -111,6 +113,9 @@ python API/statsbomb_access_test2.py
 # Backfill match_lineups (compositions d'équipe) si la table est vide
 python backfill/backfill_lineups.py
 python backfill/backfill_lineups.py --limit 20  # limite à 20 matchs
+
+# Backfill skillcorner_team_id (corriger les mappings SC/SB avec matching=statsbomb)
+python backfill/backfill_teams_sc_mapping.py
 ```
 
 ---
@@ -188,9 +193,9 @@ StatsBomb (Ligue 1 France)
               │ matching par date + noms d'équipes
               ▼
 SkillCorner (FRA Ligue 1)
-    → skillcorner_team_id, skillcorner_match_id, player_match_physical
+    → skillcorner_team_id (matching=statsbomb + statsbomb_id prioritaire), skillcorner_match_id, player_match_physical
               │
-              │ matching par nom (fuzzy)
+              │ matching par statsbomb_id (précis) ou par nom (fallback)
               ▼
 Transfermarkt (Ligue 1)
     → market_value, contract_expiry, current_club, agent
